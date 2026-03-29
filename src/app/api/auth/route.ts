@@ -7,36 +7,22 @@ import {
   createRefreshToken,
   revokeRefreshToken,
 } from "@/services/user.service";
-
-const RATE_LIMIT_WINDOW = 60 * 1000;
-const MAX_REQUESTS = 10;
-
-const rateLimitMap = new Map<string, { count: number; timestamp: number }>();
-
-function rateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-
-  if (!record || now - record.timestamp > RATE_LIMIT_WINDOW) {
-    rateLimitMap.set(ip, { count: 1, timestamp: now });
-    return true;
-  }
-
-  if (record.count >= MAX_REQUESTS) {
-    return false;
-  }
-
-  record.count++;
-  return true;
-}
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") || "unknown";
+  const rateLimitResult = await checkRateLimit(ip);
 
-  if (!rateLimit(ip)) {
+  if (!rateLimitResult.success) {
     return NextResponse.json(
       { success: false, error: "Too many requests" },
-      { status: 429 },
+      {
+        status: 429,
+        headers: {
+          "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
+          "X-RateLimit-Reset": rateLimitResult.resetAt.toString(),
+        },
+      },
     );
   }
 

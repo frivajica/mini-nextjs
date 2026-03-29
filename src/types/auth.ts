@@ -17,6 +17,11 @@ export const updateUserSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+export const settingsSchema = z.object({
+  name: z.string().min(1, "Name is required").max(255),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type SettingsInput = z.infer<typeof settingsSchema>;

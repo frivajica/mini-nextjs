@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuthStore } from "@/stores/auth.store";
+import { useUsers, useDeleteUser } from "@/hooks/use-users";
 import {
   Card,
   CardContent,
@@ -10,68 +11,28 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
-import type { User } from "@/lib/schema";
 
 export default function UsersPage() {
   const { user: currentUser, refreshToken } = useAuthStore();
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isAdmin = currentUser?.role === "ADMIN";
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  const { data: users = [], isLoading, error } = useUsers(refreshToken);
 
-  const fetchUsers = async () => {
-    try {
-      const response = await fetch("/api/users", {
-        headers: {
-          Authorization: `Bearer ${refreshToken}`,
-        },
-      });
-      const json = await response.json();
-      if (json.success) {
-        setUsers(json.data);
-      } else {
-        setError(json.error);
-      }
-    } catch {
-      setError("Failed to fetch users");
-    } finally {
-      setLoading(false);
-    }
+  const deleteUser = useDeleteUser(refreshToken);
+
+  const handleDelete = (id: number) => {
+    setDeleteError(null);
+    deleteUser.mutate(id, {
+      onError: (err) => {
+        setDeleteError(err.message);
+      },
+    });
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this user?")) return;
-
-    setDeletingId(id);
-    try {
-      const response = await fetch(`/api/users?id=${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${refreshToken}`,
-        },
-      });
-      const json = await response.json();
-      if (json.success) {
-        setUsers(users.filter((u) => u.id !== id));
-      } else {
-        alert(json.error);
-      }
-    } catch {
-      alert("Failed to delete user");
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -83,7 +44,7 @@ export default function UsersPage() {
     return (
       <Card>
         <CardContent className="py-8">
-          <p className="text-center text-destructive">{error}</p>
+          <p className="text-center text-destructive">{error.message}</p>
         </CardContent>
       </Card>
     );
@@ -112,6 +73,11 @@ export default function UsersPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {deleteError && (
+            <div className="mb-4 p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+              {deleteError}
+            </div>
+          )}
           <div className="rounded-md border">
             <table className="w-full">
               <thead>
@@ -177,11 +143,12 @@ export default function UsersPage() {
                             size="icon"
                             onClick={() => handleDelete(user.id)}
                             disabled={
-                              deletingId === user.id ||
+                              deleteUser.isPending ||
                               user.id === currentUser?.id
                             }
                           >
-                            {deletingId === user.id ? (
+                            {deleteUser.isPending &&
+                            deleteUser.variables === user.id ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                               <Trash2 className="h-4 w-4" />

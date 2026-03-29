@@ -4,13 +4,6 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth.store";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Settings, LogOut } from "lucide-react";
 
@@ -20,7 +13,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { user, refreshToken, logout, clearAuth } = useAuthStore();
+  const { user, refreshToken, logout } = useAuthStore();
 
   useEffect(() => {
     if (!user || !refreshToken) {
@@ -29,16 +22,8 @@ export default function DashboardLayout({
   }, [user, refreshToken, router]);
 
   const handleLogout = async () => {
-    try {
-      await fetch("/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "logout", refreshToken }),
-      });
-    } finally {
-      clearAuth();
-      router.push("/login");
-    }
+    await logout();
+    router.push("/login");
   };
 
   if (!user || !refreshToken) {

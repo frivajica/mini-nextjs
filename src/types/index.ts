@@ -7,6 +7,19 @@ export interface SessionUser {
   role: UserRole;
 }
 
+export interface SanitizedUser {
+  id: number;
+  email: string;
+  name: string | null;
+  role: UserRole;
+  isActive: boolean;
+}
+
+export interface AuthResponse {
+  user: SanitizedUser;
+  refreshToken: string;
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -20,5 +33,14 @@ export interface PaginatedResponse<T> {
     page: number;
     pageSize: number;
     totalPages: number;
+  };
+}
+
+export function mapApiUserToSessionUser(user: SanitizedUser): SessionUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
   };
 }

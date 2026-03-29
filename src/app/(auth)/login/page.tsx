@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/form";
 import { loginSchema, type LoginInput } from "@/types/auth";
 import { useAuthStore } from "@/stores/auth.store";
+import type { ApiResponse, AuthResponse } from "@/types";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,13 +43,18 @@ export default function LoginPage() {
         body: JSON.stringify({ action: "login", data }),
       });
 
-      const json = await response.json();
+      const json: ApiResponse<AuthResponse> = await response.json();
 
-      if (!json.success) {
+      if (!json.success || !json.data) {
         throw new Error(json.error || "Login failed");
       }
 
-      setUser(json.data.user);
+      setUser({
+        id: json.data.user.id,
+        email: json.data.user.email,
+        name: json.data.user.name,
+        role: json.data.user.role as "USER" | "ADMIN",
+      });
       setRefreshToken(json.data.refreshToken);
       router.push("/users");
     } catch (error) {

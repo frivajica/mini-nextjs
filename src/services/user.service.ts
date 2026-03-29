@@ -2,9 +2,8 @@ import { db } from "@/lib/db";
 import { users, refreshTokens } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
-import { v4 as uuidv4 } from "uuid";
 import { redis } from "@/lib/redis";
-import type { User, NewUser } from "@/lib/schema";
+import type { User } from "@/lib/schema";
 
 const SALT_ROUNDS = 10;
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
@@ -57,7 +56,7 @@ export async function validateUser(
 }
 
 export async function createRefreshToken(userId: number): Promise<string> {
-  const token = uuidv4();
+  const token = crypto.randomUUID();
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
 

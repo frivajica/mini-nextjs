@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useAuthStore } from "@/stores/auth.store";
+import { useUpdateSettings } from "@/hooks/use-settings";
 import {
   Card,
   CardContent,
@@ -19,17 +19,11 @@ import {
   Input,
 } from "@/components/ui/form";
 import { User, Mail, Shield } from "lucide-react";
-import { z } from "zod";
-
-const settingsSchema = z.object({
-  name: z.string().min(1, "Name is required").max(255),
-});
-
-type SettingsInput = z.infer<typeof settingsSchema>;
+import { settingsSchema, type SettingsInput } from "@/types/auth";
 
 export default function SettingsPage() {
-  const { user } = useAuthStore();
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { user, setUser } = useAuthStore();
+  const updateSettings = useUpdateSettings();
 
   const form = useForm<SettingsInput>({
     resolver: zodResolver(settingsSchema),
@@ -39,16 +33,23 @@ export default function SettingsPage() {
     },
   });
 
-  const onSubmit = async (data: SettingsInput) => {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setSuccessMessage("Settings saved successfully");
-    } catch {
-      form.setError("root", {
-        message: "Failed to save settings",
-      });
-    }
-  };
+  const onSubmit = form.handleSubmit((data) => {
+    updateSettings.mutate(data, {
+      onSuccess: (updatedUser) => {
+        setUser({
+          id: updatedUser.id,
+          email: updatedUser.email,
+          name: updatedUser.name,
+          role: updatedUser.role,
+        });
+      },
+      onError: (error) => {
+        form.setError("root", {
+          message: error.message,
+        });
+      },
+    });
+  });
 
   return (
     <div className="space-y-6">
@@ -74,7 +75,7 @@ export default function SettingsPage() {
           </div>
 
           <FormProvider {...form}>
-            <Form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <Form onSubmit={onSubmit} className="space-y-4">
               {form.formState.errors.root && (
                 <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
                   {form.formState.errors.root.message}
@@ -119,15 +120,15 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <FormButton type="submit" loading={form.formState.isSubmitting}>
+              <FormButton type="submit" loading={updateSettings.isPending}>
                 Save Changes
               </FormButton>
             </Form>
           </FormProvider>
 
-          {successMessage && (
+          {updateSettings.isSuccess && (
             <div className="p-3 text-sm bg-green-100 text-green-800 rounded-md">
-              {successMessage}
+              Settings saved successfully
             </div>
           )}
         </CardContent>

@@ -9,7 +9,7 @@ const getRedisUrl = () => {
 
 export const redis = new Redis(getRedisUrl(), {
   maxRetriesPerRequest: 3,
-  retryStrategy(times) {
+  retryStrategy(times: number) {
     const delay = Math.min(times * 50, 2000);
     return delay;
   },
