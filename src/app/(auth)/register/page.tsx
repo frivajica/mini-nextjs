@@ -38,10 +38,10 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterInput) => {
     try {
-      const response = await fetch("/api/auth", {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "register", data }),
+        body: JSON.stringify(data),
       });
 
       const json: ApiResponse<AuthResponse> = await response.json();

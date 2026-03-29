@@ -37,10 +37,10 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginInput) => {
     try {
-      const response = await fetch("/api/auth", {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "login", data }),
+        body: JSON.stringify(data),
       });
 
       const json: ApiResponse<AuthResponse> = await response.json();
