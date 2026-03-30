@@ -61,8 +61,10 @@ increment(); // 2
 ```javascript
 const obj = {
   name: "test",
-  regular() { console.log(this.name); },
-  arrow = () => console.log(this.name),
+  regular() {
+    console.log(this.name);
+  },
+  arrow: () => console.log(this.name), // arrow fn doesn't have own `this`
 };
 ```
 
@@ -629,9 +631,10 @@ const Input = forwardRef((props, ref) => <input ref={ref} {...props} />);
 
 ### Q: What is Error Boundary?
 
-**Answer:** A React component that catches JavaScript errors in its children and displays a fallback UI instead of crashing.
+**Answer:** **Class components only** - a React component that catches JavaScript errors in its children and displays a fallback UI. (Function components can't be error boundaries yet, but you can use `error.tsx` files in App Router.)
 
 ```tsx
+// Class component only (can't use hooks)
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
   static getDerivedStateFromError() {
@@ -648,10 +651,10 @@ class ErrorBoundary extends React.Component {
 }
 ```
 
-**💡 Remember:** Error boundaries catch React errors, not:
+**💡 Remember:** Error boundaries catch React errors, NOT:
 
 - Event handlers
-- Async code
+- Async code (setTimeout, Promises)
 - Server-side rendering
 
 ---
@@ -807,21 +810,24 @@ const { data: session } = useSession();
 
 ### Q: What is the difference between `getServerSideProps` and `getStaticProps`?
 
-**Answer:** `getServerSideProps` runs on EVERY request (SSR). `getStaticProps` runs at build time, pages are cached (SSG).
+**Answer:** These are **Pages Router only** (App Router is the modern approach). `getServerSideProps` runs on EVERY request (SSR). `getStaticProps` runs at build time, pages are cached (SSG).
+
+> **Note:** In App Router (current), use `async` Server Components directly instead.
 
 ```typescript
-// SSR - runs every request
+// Pages Router only (deprecated) - App Router uses async Server Components
 export async function getServerSideProps() {
+  // SSR
   return { props: { data: await fetchData() } };
 }
 
-// SSG - runs at build
 export async function getStaticProps() {
+  // SSG
   return { props: { data: await fetchData() } };
 }
 ```
 
-**💡 Remember:** In App Router, use `async` Server Components directly instead.
+**💡 Remember:** App Router = async components. Pages Router = getServerSideProps/getStaticProps.
 
 ---
 
@@ -874,15 +880,17 @@ app/
 
 ### Q: What is Parallel Routes?
 
-**Answer:** Multiple routes rendered simultaneously in the same layout using tabs.
+**Answer:** Multiple routes rendered simultaneously in the same layout. Uses `@foldername` syntax for parallel slot folders.
 
 ```tsx
 app/
-  @modal/(.)photo/[id]/page.tsx   → /photo/:id
-  layout.tsx → <Tabs><slot name="modal" /></Tabs>
+  @modal/
+    (.)photo/[id]/page.tsx   // Intercepts /photo/:id
+    upload/page.tsx          // Shows at /upload
+  layout.tsx → {children}   // Both render in same layout
 ```
 
-**💡 Remember:** Parallel = multiple slots in same layout. Intercepting = show modal for same URL.
+**💡 Remember:** Parallel Routes = multiple slots. Intercepting Routes = modal overlay behavior.
 
 ---
 
@@ -1066,7 +1074,7 @@ app.use((err, req, res, next) => {
 // Redis sliding window rate limit
 const requests = await redis.zrangebyscore(key, 0, now - windowMs);
 if (requests.length > max) return 429;
-await redis.zadd(key, now, `${now}-${uuid()}`);
+await redis.zadd(key, now, `${now}-${crypto.randomUUID()}`);
 ```
 
 **💡 Remember:** Rate limit = request quota per time window.
@@ -1495,9 +1503,9 @@ Login → Hash password → Compare → Create session token
 ## React Hooks Priority
 
 ```
-MUST掌握:  useState, useEffect, useCallback, useMemo, useRef
-SHOULD:    useContext, useReducer, useLayoutEffect
-NICE:      useImperativeHandle, useDebugValue
+🔴 MUST:    useState, useEffect, useCallback, useMemo, useRef
+🟡 SHOULD:  useContext, useReducer, useLayoutEffect
+🟢 NICE:    useImperativeHandle, useDebugValue
 ```
 
 ## State Management Decision Tree
