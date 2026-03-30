@@ -729,7 +729,7 @@ export default function Form() {
 
 ### Q: What is middleware/proxy in Next.js?
 
-**Answer:** Code that runs before a request is completed. Used for authentication, logging, redirects. In Next.js 16, `middleware.ts` was renamed to `proxy.ts`.
+**Answer:** Code that runs before a request is completed. Used for authentication, logging, redirects. In Next.js 16, `middleware.ts` was renamed to `proxy.ts` (but `middleware.ts` still works if you prefer Edge runtime).
 
 ```typescript
 // src/proxy.ts (Next.js 16)
@@ -740,9 +740,12 @@ export default auth(function proxy(req) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 });
+
+// Or named export:
+// export function proxy(req: NextRequest) { ... }
 ```
 
-**💡 Remember:** Proxy runs before render - great for auth checks.
+**💡 Remember:** Proxy runs before render - great for auth checks. Use `proxy.ts` (standard), `middleware.ts` (Edge/deprecated).
 
 ---
 
@@ -878,19 +881,26 @@ app/
 
 ---
 
-### Q: What is Parallel Routes?
+### Q: What are Parallel Routes and Intercepting Routes?
 
-**Answer:** Multiple routes rendered simultaneously in the same layout. Uses `@foldername` syntax for parallel slot folders.
+**Answer:** Parallel Routes render multiple pages in the same layout (slots). Intercepting Routes show one route's content within another (e.g., modal over photo). In Next.js 16, **parallel route slots require `default.js`** files.
 
 ```tsx
 app/
   @modal/
-    (.)photo/[id]/page.tsx   // Intercepts /photo/:id
-    upload/page.tsx          // Shows at /upload
-  layout.tsx → {children}   // Both render in same layout
+    upload/page.tsx          // Parallel slot: /upload
+    default.tsx             // REQUIRED in Next.js 16: fallback for slot
+  layout.tsx → {children}
 ```
 
-**💡 Remember:** Parallel Routes = multiple slots. Intercepting Routes = modal overlay behavior.
+```tsx
+// Intercepting route - modal appears while URL stays /photo/1
+app/@modal/(.)photo/[id]/page.tsx
+// Browser visits /photo/1 → sees intercepted modal version
+// Direct navigation → sees full page
+```
+
+**💡 Remember:** Parallel = multiple slots. Intercepting = overlay behavior. `default.js` is required in Next.js 16.
 
 ---
 
