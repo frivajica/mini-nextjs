@@ -44,9 +44,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: sanitizedUser });
     }
 
-    const users = await getUsers();
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(searchParams.get("limit") || "10", 10)),
+    );
+
+    const { users, total, totalPages } = await getUsers({ page, limit });
     const sanitizedUsers = users.map(({ password: _, ...user }) => user);
-    return NextResponse.json({ success: true, data: sanitizedUsers });
+    return NextResponse.json({
+      success: true,
+      data: sanitizedUsers,
+      pagination: { page, limit, total, totalPages },
+    });
   } catch (error) {
     console.error("Get users error:", error);
     return NextResponse.json(
@@ -140,7 +150,15 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await deleteUser(parseInt(id, 10));
+    const userId = parseInt(id, 10);
+    if (isNaN(userId) || userId < 1) {
+      return NextResponse.json(
+        { success: false, error: "Invalid user ID" },
+        { status: 400 },
+      );
+    }
+
+    await deleteUser(userId);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Delete user error:", error);

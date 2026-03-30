@@ -55,26 +55,29 @@ function FormField({
   label: string;
   error?: { message?: string };
   required?: boolean;
-  children: React.ReactNode;
+  children: React.ReactElement;
 }) {
   const errorId = React.useId();
   const errorMessageId = `${errorId}-error`;
+  const hasError = !!error;
 
   const child = React.isValidElement(children)
-    ? React.cloneElement(children as React.ReactElement<any>, {
-        "aria-invalid": error ? true : undefined,
-        "aria-describedby": error ? errorMessageId : undefined,
-        className: cn(
-          (children as React.ReactElement<any>).props.className,
-          error && "border-destructive focus-visible:ring-destructive",
-        ),
-      })
+    ? (children as React.ReactElement<Record<string, unknown>>)
     : children;
+
+  const enhancedChild = React.cloneElement(child, {
+    "aria-invalid": hasError ? true : undefined,
+    "aria-describedby": hasError ? errorMessageId : undefined,
+    className: cn(
+      (child.props as { className?: string }).className,
+      hasError && "border-destructive focus-visible:ring-destructive",
+    ),
+  });
 
   return (
     <div className="space-y-2">
       <Label required={required}>{label}</Label>
-      {child}
+      {enhancedChild}
       {error && (
         <p
           id={errorMessageId}

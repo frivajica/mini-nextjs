@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { loginSchema } from "@/types/auth";
 import { validateUser, createRefreshToken } from "@/services/user.service";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
+const REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
+const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
 
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") || "unknown";
+  const ip = getClientIp(request);
   const rateLimitResult = await checkRateLimit(ip);
 
   if (!rateLimitResult.success) {
@@ -36,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     const refreshToken = await createRefreshToken(user.id);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         user: {
@@ -45,9 +48,18 @@ export async function POST(request: NextRequest) {
           name: user.name,
           role: user.role,
         },
-        refreshToken,
       },
     });
+
+    response.cookies.set(REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
+      path: "/",
+    });
+
+    return response;
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

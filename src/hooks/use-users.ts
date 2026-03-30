@@ -3,12 +3,8 @@ import type { SanitizedUser, ApiResponse } from "@/types";
 
 const USERS_QUERY_KEY = ["users"];
 
-async function fetchUsers(refreshToken: string): Promise<SanitizedUser[]> {
-  const response = await fetch("/api/users", {
-    headers: {
-      Authorization: `Bearer ${refreshToken}`,
-    },
-  });
+async function fetchUsers(): Promise<SanitizedUser[]> {
+  const response = await fetch("/api/users");
 
   const json: ApiResponse<SanitizedUser[]> = await response.json();
 
@@ -19,12 +15,9 @@ async function fetchUsers(refreshToken: string): Promise<SanitizedUser[]> {
   return json.data;
 }
 
-async function deleteUser(id: number, refreshToken: string): Promise<void> {
+async function deleteUser(id: number): Promise<void> {
   const response = await fetch(`/api/users?id=${id}`, {
     method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${refreshToken}`,
-    },
   });
 
   const json: ApiResponse = await response.json();
@@ -34,25 +27,18 @@ async function deleteUser(id: number, refreshToken: string): Promise<void> {
   }
 }
 
-export function useUsers(refreshToken: string | null) {
+export function useUsers() {
   return useQuery({
     queryKey: USERS_QUERY_KEY,
-    queryFn: () => {
-      if (!refreshToken) throw new Error("No refresh token");
-      return fetchUsers(refreshToken);
-    },
-    enabled: !!refreshToken,
+    queryFn: fetchUsers,
   });
 }
 
-export function useDeleteUser(refreshToken: string | null) {
+export function useDeleteUser() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: number) => {
-      if (!refreshToken) throw new Error("No refresh token");
-      return deleteUser(id, refreshToken);
-    },
+    mutationFn: deleteUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
     },

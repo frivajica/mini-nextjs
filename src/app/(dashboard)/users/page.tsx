@@ -14,14 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 
 export default function UsersPage() {
-  const { user: currentUser, refreshToken } = useAuthStore();
+  const { user: currentUser } = useAuthStore();
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isAdmin = currentUser?.role === "ADMIN";
 
-  const { data: users = [], isLoading, error } = useUsers(refreshToken);
+  const { data: users = [], isLoading, error } = useUsers();
 
-  const deleteUser = useDeleteUser(refreshToken);
+  const deleteUser = useDeleteUser();
 
   const handleDelete = (id: number) => {
     setDeleteError(null);
@@ -80,25 +80,46 @@ export default function UsersPage() {
           )}
           <div className="rounded-md border">
             <table className="w-full">
+              <caption className="sr-only">
+                User List - {users.length} total
+              </caption>
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-3 text-left text-sm font-medium">
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-sm font-medium"
+                  >
                     ID
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium">
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-sm font-medium"
+                  >
                     Name
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium">
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-sm font-medium"
+                  >
                     Email
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium">
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-sm font-medium"
+                  >
                     Role
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium">
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-sm font-medium"
+                  >
                     Status
                   </th>
                   {isAdmin && (
-                    <th className="px-4 py-3 text-right text-sm font-medium">
+                    <th
+                      scope="col"
+                      className="px-4 py-3 text-right text-sm font-medium"
+                    >
                       Actions
                     </th>
                   )}
@@ -135,7 +156,11 @@ export default function UsersPage() {
                     {isAdmin && (
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Edit user ${user.name}`}
+                          >
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button
@@ -146,6 +171,7 @@ export default function UsersPage() {
                               deleteUser.isPending ||
                               user.id === currentUser?.id
                             }
+                            aria-label={`Delete user ${user.name}`}
                           >
                             {deleteUser.isPending &&
                             deleteUser.variables === user.id ? (

@@ -1,208 +1,135 @@
 # Next.js Learning Guide
 
-> ⭐ = Must know for production apps  
-> 🔧 = Important for specific scenarios  
-> 📚 = Good to understand
-
-This project is a production-ready Next.js API with frontend. Use this guide to learn Next.js by comparing with Express and NestJS.
+> **How to use**: Read the Quick Reference first. Then study each topic. Use Interview Questions to test yourself.
 
 ---
 
 ## Quick Reference
 
-| Priority | Topic                        | Section                               |
-| -------- | ---------------------------- | ------------------------------------- |
-| ⭐       | Project Structure            | [1](#1-project-structure)             |
-| ⭐       | App Router                   | [2](#2-app-router)                    |
-| ⭐       | API Routes                   | [3](#3-api-routes)                    |
-| ⭐       | Authentication (NextAuth)    | [4](#4-authentication-nextauth)       |
-| ⭐       | Zustand State Management     | [5](#5-zustand-state-management)      |
-| ⭐       | Server vs Client Components  | [6](#6-server-vs-client-components)   |
-| ⭐       | Middleware                   | [7](#7-middleware)                    |
-| ⭐       | Database & Drizzle           | [8](#8-database--drizzle)             |
-| ⭐       | Redis Caching                | [9](#9-redis-caching)                 |
-| ⭐       | Form Handling                | [10](#10-form-handling)               |
-| 🔧       | Docker Setup                 | [11](#11-docker-setup)                |
-| 🔧       | Security Best Practices      | [12](#12-security-best-practices)     |
-| 📚       | Next.js vs NestJS vs Express | [13](#13-nextjs-vs-nestjs-vs-express) |
+### Core Topics (Study in Order)
+
+| #   | Topic                          | Key Concept                      | File                 |
+| --- | ------------------------------ | -------------------------------- | -------------------- |
+| 1   | [App Router](#1-app-router)    | Server Components by default     | `src/app/`           |
+| 2   | [API Routes](#2-api-routes)    | REST endpoints in `src/app/api/` | `src/app/api/`       |
+| 3   | [NextAuth](#3-auth)            | JWT + httpOnly cookies           | `src/lib/auth.ts`    |
+| 4   | [Middleware](#4-middleware)    | Route protection                 | `src/middleware.ts`  |
+| 5   | [Zustand](#5-state)            | Global UI state                  | `src/stores/`        |
+| 6   | [React Query](#6-server-state) | Server state                     | `src/hooks/`         |
+| 7   | [Drizzle](#7-database)         | Type-safe SQL                    | `src/lib/schema.ts`  |
+| 8   | [Redis](#8-redis)              | Token caching + rate limiting    | `src/lib/redis.ts`   |
+| 9   | [Forms](#9-forms)              | React Hook Form + Zod            | `src/components/ui/` |
+
+### CLI Commands
+
+```bash
+yarn dev          # Start development
+yarn build        # Production build
+yarn db:push     # Push schema to DB
+yarn db:studio    # Open DB browser
+```
 
 ---
 
-## 1. Project Structure ⭐
+## 1. App Router
 
-### Files to Review
-
-- [src/app/layout.tsx](../src/app/layout.tsx) - Root layout
-- [src/app/page.tsx](../src/app/page.tsx) - Home page
-- [src/lib/auth.ts](../src/lib/auth.ts) - NextAuth config
-- [src/lib/db.ts](../src/lib/db.ts) - Database client
-- [src/lib/redis.ts](../src/lib/redis.ts) - Redis client
-
-### Directory Layout
-
-```
-src/
-├── app/                      # Next.js App Router
-│   ├── (auth)/              # Auth group (login, register)
-│   │   ├── login/
-│   │   └── register/
-│   ├── (dashboard)/         # Protected routes
-│   │   ├── users/
-│   │   └── settings/
-│   ├── api/                # API Routes
-│   │   ├── auth/
-│   │   └── users/
-│   ├── layout.tsx
-│   └── page.tsx
-├── components/ui/          # Base components
-├── lib/                     # Core libraries
-├── stores/                  # Zustand stores
-├── services/                # Business logic
-└── types/                   # TypeScript types
-```
-
-### Route Groups
-
-- `(auth)` - Public routes without layout
-- `(dashboard)` - Protected routes with dashboard layout
-
----
-
-## 2. App Router ⭐
-
-### Key Concepts
-
-Next.js 13+ uses the **App Router** with React Server Components.
+**Key Idea**: Components are **Server by default**. Add `"use client"` only when needed.
 
 ```typescript
-// src/app/page.tsx - Server Component (default)
-export default async function Home() {
-  const session = await auth();
-  if (session?.user) {
-    redirect("/users");
-  } else {
-    redirect("/login");
-  }
+// Server Component (default) - can use async/await, db
+export default async function Page() {
+  const users = await db.select().from(users);
+  return <UserList users={users} />;
+}
+
+// Client Component - use hooks, events
+"use client";
+export default function Form() {
+  const [name, setName] = useState("");
+  return <input value={name} onChange={e => setName(e.target.value)} />;
 }
 ```
 
-### Layouts
+### When to Use
 
-```typescript
-// src/app/layout.tsx - Root layout
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  );
-}
-```
-
-### Key Differences from Pages Router
-
-| Feature       | App Router        | Pages Router       |
-| ------------- | ----------------- | ------------------ |
-| Components    | Server by default | Client by default  |
-| Layouts       | Nested layouts    | \_app.js           |
-| Data Fetching | async/await       | getServerSideProps |
-| API Routes    | Route Handlers    | Pages              |
+| Feature             | Server | Client |
+| ------------------- | ------ | ------ |
+| Database queries    | ✅     | ❌     |
+| async/await         | ✅     | ❌     |
+| useState, useEffect | ❌     | ✅     |
+| Event handlers      | ❌     | ✅     |
+| NextAuth            | ✅     | ✅     |
 
 ---
 
-## 3. API Routes ⭐
+## 2. API Routes
 
-### Files to Review
-
-- [src/app/api/auth/route.ts](../src/app/api/auth/route.ts)
-- [src/app/api/users/route.ts](../src/app/api/users/route.ts)
-
-### Route Handlers
+**Key Idea**: Create REST endpoints by exporting named functions.
 
 ```typescript
 // src/app/api/users/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   const session = await auth();
+  if (!session?.user)
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  return Response.json({ success: true, data: users });
+}
 
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Handle request
-  return NextResponse.json({ success: true, data: users });
+export async function POST(request: Request) {
+  const body = await request.json();
+  return Response.json({ success: true });
 }
 ```
 
 ### HTTP Methods
 
-| Method    | Export                                    | Purpose         |
-| --------- | ----------------------------------------- | --------------- |
-| GET       | `export async function GET()`             | Fetch data      |
-| POST      | `export async function POST()`            | Create resource |
-| PUT/PATCH | `export async function PUT()` / `PATCH()` | Update resource |
-| DELETE    | `export async function DELETE()`          | Delete resource |
-
-### Why API Routes over Server Actions?
-
-For this project, we chose **API Routes** because:
-
-- More explicit control over HTTP
-- Easier to test with external tools (curl, Postman)
-- Better debugging experience
-- Industry standard REST pattern
-
-Server Actions are better for:
-
-- Form submissions with progressive enhancement
-- Mutating data from Server Components
-- Simpler mutations without HTTP overhead
+| Method | Use for         |
+| ------ | --------------- |
+| GET    | Fetch data      |
+| POST   | Create resource |
+| PATCH  | Update resource |
+| DELETE | Delete resource |
 
 ---
 
-## 4. Authentication (NextAuth) ⭐
+## 3. Auth (NextAuth)
 
-### Files to Review
+**Key Idea**: Two tokens - JWT for sessions, refresh token in httpOnly cookie for rotation.
 
-- [src/lib/auth.ts](../src/lib/auth.ts)
-- [src/app/api/auth/[...nextauth]/route.ts](../src/app/api/auth/[...nextauth]/route.ts)
-- [src/stores/auth.store.ts](../src/stores/auth.store.ts)
-- [docs/AUTH_INFO.md](./AUTH_INFO.md)
+```
+Login → JWT cookie (NextAuth) + Refresh token (httpOnly cookie)
+Refresh → Validate old, create new, revoke old (atomic)
+Logout → Clear cookie, revoke token
+```
 
 ### Configuration
 
 ```typescript
 // src/lib/auth.ts
-import NextAuth from "next-auth";
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import Credentials from "next-auth/providers/credentials";
-
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: DrizzleAdapter(db),
+export const { handlers, auth } = NextAuth({
   session: { strategy: "jwt" },
   providers: [
     Credentials({
       async authorize(credentials) {
-        // Validate credentials
-        return user;
+        const user = await validateUser(
+          credentials.email,
+          credentials.password,
+        );
+        return user
+          ? { id: user.id, email: user.email, role: user.role }
+          : null;
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.role = user.role;
       }
       return token;
     },
-    async session({ session, token }) {
+    session({ session, token }) {
       if (session.user) {
         session.user.id = token.id;
         session.user.role = token.role;
@@ -213,483 +140,224 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 });
 ```
 
-### Protected Routes Pattern
+### Auth Flow
 
-```typescript
-// src/app/(dashboard)/layout.tsx
-"use client";
-
-export default function DashboardLayout({ children }) {
-  const { user } = useAuthStore();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!user) {
-      router.push("/login");
-    }
-  }, [user, router]);
-
-  if (!user) return <Loading />;
-
-  return <>{children}</>;
-}
 ```
-
-### NextAuth vs Custom JWT
-
-| Feature            | NextAuth          | Custom JWT |
-| ------------------ | ----------------- | ---------- |
-| Session Management | Built-in          | Manual     |
-| Providers          | Multiple built-in | Manual     |
-| Token Refresh      | Automatic         | Manual     |
-| Database Adapters  | Many built-in     | Manual     |
-| Complexity         | Higher            | Lower      |
+1. Login → POST /api/auth/login → Set httpOnly cookie
+2. Access protected route → NextAuth reads JWT cookie
+3. Token expires → POST /api/auth/refresh → Rotate tokens
+4. Logout → POST /api/auth/logout → Clear cookie + revoke
+```
 
 ---
 
-## 5. Zustand State Management ⭐
+## 4. Middleware
 
-### Files to Review
-
-- [src/stores/auth.store.ts](../src/stores/auth.store.ts)
-
-### Why Zustand?
-
-- **Minimal boilerplate** - No providers or contexts needed
-- **DevTools support** - Built-in Redux DevTools support
-- **TypeScript** - First-class TS support
-- **Performance** - Selector-based subscriptions
-
-### Simple Store Pattern
-
-```typescript
-// src/stores/auth.store.ts
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-
-interface AuthState {
-  user: User | null;
-  refreshToken: string | null;
-  setUser: (user: User) => void;
-  setRefreshToken: (token: string) => void;
-  clearAuth: () => void;
-}
-
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      refreshToken: null,
-      setUser: (user) => set({ user }),
-      setRefreshToken: (refreshToken) => set({ refreshToken }),
-      clearAuth: () => set({ user: null, refreshToken: null }),
-    }),
-    { name: "auth-storage" },
-  ),
-);
-```
-
-### Usage in Components
-
-```typescript
-// In a component
-"use client";
-import { useAuthStore } from "@/stores/auth.store";
-
-export function Profile() {
-  const { user, setUser } = useAuthStore();
-
-  return <div>{user?.name}</div>;
-}
-```
-
-### When to Use Zustand vs React Query
-
-| Scenario                      | Use         |
-| ----------------------------- | ----------- |
-| Global UI state (auth, theme) | Zustand     |
-| Server state (users, data)    | React Query |
-| Form state                    | Local state |
-
----
-
-## 6. Server vs Client Components ⭐
-
-### Server Components (Default in App Router)
-
-```typescript
-// src/app/page.tsx - Server Component
-export default async function Home() {
-  // Can do direct DB queries
-  const users = await db.select().from(usersTable);
-
-  return <UserList users={users} />;
-}
-```
-
-### Client Components ("use client")
-
-```typescript
-// src/app/users/page.tsx - Client Component
-"use client";
-
-export default function UsersPage() {
-  const [users, setUsers] = useState([]);
-
-  useEffect(() => {
-    fetchUsers().then(setUsers);
-  }, []);
-
-  return <UserList users={users} />;
-}
-```
-
-### When to Use Which
-
-| Feature            | Server | Client |
-| ------------------ | ------ | ------ |
-| Database queries   | ✅     | ❌     |
-| DOM manipulation   | ❌     | ✅     |
-| useState/useEffect | ❌     | ✅     |
-| NextAuth session   | ✅     | ✅     |
-| Route params       | ✅     | ✅     |
-
----
-
-## 7. Middleware ⭐
-
-### Files to Review
-
-- [src/middleware.ts](../src/middleware.ts) (if created)
-
-### Basic Middleware Pattern
+**Key Idea**: Protect routes BEFORE they render. NextAuth provides `auth()` middleware.
 
 ```typescript
 // src/middleware.ts
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+export default auth((req) => {
+  const isLoggedIn = !!req.auth;
+  const isAuthPage = req.nextUrl.pathname.startsWith("/login");
 
-export function middleware(request: NextRequest) {
-  // Check for auth token
-  const token = request.cookies.get("auth-token");
-
-  if (!token && request.nextUrl.pathname.startsWith("/users")) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  if (!isAuthPage && !isLoggedIn) {
+    return NextResponse.redirect(new URL("/login", req.url));
   }
-
-  return NextResponse.next();
-}
+});
 
 export const config = {
-  matcher: ["/users/:path*", "/settings/:path*"],
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };
 ```
 
 ---
 
-## 8. Database & Drizzle ⭐
+## 5. State: Zustand
 
-### Files to Review
-
-- [src/lib/schema.ts](../src/lib/schema.ts)
-- [src/lib/db.ts](../src/lib/db.ts)
-- [drizzle.config.ts](../drizzle.config.ts)
-
-### Schema Definition
+**Key Idea**: Simple global state. No providers needed.
 
 ```typescript
-// src/lib/schema.ts
-import {
-  pgTable,
-  varchar,
-  boolean,
-  timestamp,
-  integer,
-} from "drizzle-orm/pg-core";
+// src/stores/auth.store.ts
+interface AuthState {
+  user: User | null;
+  isLoggingOut: boolean;
+  logout: () => Promise<void>;
+}
 
+export const useAuthStore = create<AuthState>()((set) => ({
+  user: null,
+  logout: async () => {
+    set({ isLoggingOut: true });
+    await fetch("/api/auth/logout", { method: "POST" });
+    set({ user: null, isLoggingOut: false });
+  },
+})));
+```
+
+### Usage
+
+```typescript
+const { user, logout } = useAuthStore();
+```
+
+### When to Use
+
+| State Type                 | Tool                          |
+| -------------------------- | ----------------------------- |
+| Global UI (auth, theme)    | Zustand                       |
+| Server data (users, posts) | React Query                   |
+| Form state                 | Local state / React Hook Form |
+
+---
+
+## 6. Server State: React Query
+
+**Key Idea**: Cache server data. Handles loading, errors, refetching.
+
+```typescript
+// src/hooks/use-users.ts
+export function useUsers() {
+  return useQuery({
+    queryKey: ["users"],
+    queryFn: () => fetch("/api/users").then((r) => r.json()),
+  });
+}
+```
+
+### Usage
+
+```typescript
+const { data: users = [], isLoading, error } = useUsers();
+```
+
+---
+
+## 7. Database (Drizzle)
+
+**Key Idea**: Type-safe SQL. Define schema, write queries.
+
+```typescript
+// Schema: src/lib/schema.ts
 export const users = pgTable("users", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }),
-  password: varchar("password", { length: 255 }).notNull(),
+  password: text("password").notNull(),
   role: varchar("role", { length: 50 }).default("USER").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
-```
 
-### Database Client
-
-```typescript
-// src/lib/db.ts
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-
-const client = postgres(process.env.DATABASE_URL!, { prepare: false });
-export const db = drizzle(client, { schema });
-```
-
-### Drizzle Commands
-
-```bash
-yarn db:generate   # Generate migrations
-yarn db:migrate    # Run migrations
-yarn db:push       # Push schema to DB
-yarn db:studio     # Open Drizzle Studio
+// Query
+const allUsers = await db.select().from(users);
+const user = await db.query.users.findFirst({ where: eq(users.email, email) });
 ```
 
 ---
 
-## 9. Redis Caching ⭐
+## 8. Redis
 
-### Files to Review
+**Key Idea**: Cache refresh tokens for fast validation + rate limiting.
 
-- [src/lib/redis.ts](../src/lib/redis.ts)
-- [src/services/user.service.ts](../src/services/user.service.ts)
-
-### Redis Client
+### Token Caching
 
 ```typescript
-// src/lib/redis.ts
-import Redis from "ioredis";
+// Cache on create
+await redis.setex(`refresh:${token}`, 7 * 24 * 60 * 60, userId);
 
-export const redis = new Redis(process.env.REDIS_URL!);
+// Check cache first
+const cached = await redis.get(`refresh:${token}`);
+if (cached) return getUserById(parseInt(cached));
 ```
-
-### Usage in Service
-
-```typescript
-// src/services/user.service.ts
-export async function validateRefreshToken(token: string) {
-  // Check Redis cache first
-  const cachedUserId = await redis.get(`refresh:${token}`);
-
-  if (cachedUserId) {
-    return getUserById(parseInt(cachedUserId));
-  }
-
-  // Fallback to DB
-  const storedToken = await db.query.refreshTokens.findFirst({...});
-
-  if (storedToken) {
-    // Cache for next time
-    await redis.setex(`refresh:${token}`, 7 * 24 * 60 * 60, userId);
-  }
-
-  return user;
-}
-```
-
----
-
-## 10. Form Handling ⭐
-
-### Files to Review
-
-- [src/components/ui/form.tsx](../src/components/ui/form.tsx)
-- [src/app/(auth)/login/page.tsx](<../src/app/(auth)/login/page.tsx>)
-
-### Simple Form Component
-
-```typescript
-// src/components/ui/form.tsx
-"use client";
-
-function Form({ children, onSubmit }) {
-  return (
-    <form onSubmit={onSubmit}>
-      {children}
-    </form>
-  );
-}
-
-function FormField({ label, error, children }) {
-  return (
-    <div>
-      <label>{label}</label>
-      {children}
-      {error && <p className="error">{error}</p>}
-    </div>
-  );
-}
-```
-
-### Usage with Zod Validation
-
-```typescript
-// src/app/(auth)/login/page.tsx
-"use client";
-
-export default function LoginPage() {
-  const [errors, setErrors] = useState({});
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-
-    const result = loginSchema.safeParse({
-      email: formData.get("email"),
-      password: formData.get("password"),
-    });
-
-    if (!result.success) {
-      setErrors(result.error.flatten().fieldErrors);
-      return;
-    }
-
-    // Submit form
-  };
-
-  return (
-    <Form onSubmit={handleSubmit}>
-      <FormField label="Email" error={errors.email}>
-        <Input name="email" type="email" />
-      </FormField>
-      <FormButton type="submit">Sign In</FormButton>
-    </Form>
-  );
-}
-```
-
----
-
-## 11. Docker Setup 🔧
-
-### Files to Review
-
-- [Dockerfile](../Dockerfile)
-- [docker-compose.yml](../docker-compose.yml)
-
-### Services
-
-```yaml
-# docker-compose.yml
-services:
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: mini_nextjs
-    ports:
-      - "5432:5432"
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-```
-
-### Commands
-
-```bash
-docker-compose up -d           # Start services
-docker-compose down            # Stop services
-docker-compose ps              # Check status
-docker exec -it postgres psql -U user -d mini_nextjs  # DB shell
-```
-
----
-
-## 12. Security Best Practices 🔧
 
 ### Rate Limiting
 
 ```typescript
-// In API routes
-const rateLimitMap = new Map();
-const RATE_LIMIT_WINDOW = 60 * 1000;
-const MAX_REQUESTS = 10;
-
-function rateLimit(ip: string) {
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-
-  if (!record || now - record.timestamp > RATE_LIMIT_WINDOW) {
-    rateLimitMap.set(ip, { count: 1, timestamp: now });
-    return true;
-  }
-
-  return record.count < MAX_REQUESTS;
-}
-```
-
-### Input Validation
-
-```typescript
-// Always validate with Zod
-import { z } from "zod";
-
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
-```
-
-### Password Hashing
-
-```typescript
-import bcrypt from "bcrypt";
-
-const hashedPassword = await bcrypt.hash(password, 10);
-const isValid = await bcrypt.compare(password, hash);
+// Sliding window rate limit
+const multi = redis.multi();
+multi.zremrangebyscore(key, 0, windowStart);
+multi.zadd(key, now, `${now}-${crypto.randomUUID()}`);
+multi.zcard(key);
+const count = await multi.exec();
 ```
 
 ---
 
-## 13. Next.js vs NestJS vs Express 📚
+## 9. Forms
 
-### Architecture Comparison
+**Key Idea**: React Hook Form for form state + Zod for validation.
 
-| Aspect    | Express | NestJS        | Next.js        |
-| --------- | ------- | ------------- | -------------- |
-| Framework | Minimal | Full-featured | Full-stack     |
-| Frontend  | None    | None          | Built-in React |
-| API Style | Routes  | Controllers   | Route Handlers |
-| DI System | Manual  | Built-in      | N/A            |
-| Modules   | Manual  | Built-in      | N/A            |
+```typescript
+// Validation schema
+const schema = z.object({
+  email: z.string().email("Invalid email"),
+  password: z.string().min(8, "Min 8 characters"),
+});
 
-### Authentication Comparison
+// In component
+const form = useForm({ resolver: zodResolver(schema) });
+form.handleSubmit((data) => {
+  /* valid data */
+});
+```
 
-| Feature        | Express    | NestJS      | Next.js          |
-| -------------- | ---------- | ----------- | ---------------- |
-| Auth           | Custom JWT | Passport.js | NextAuth.js      |
-| Sessions       | In-memory  | DB          | NextAuth + Redis |
-| Token Rotation | DB-based   | DB-based    | Redis-based      |
+### FormField Component
 
-### Learning Path
+```typescript
+<FormField label="Email" error={form.formState.errors.email}>
+  <Input {...form.register("email")} />
+</FormField>
+```
 
-1. **Start with**: `src/app/page.tsx` - Entry point
-2. **Then**: `src/app/(auth)/login/page.tsx` - Auth flow
-3. **Then**: `src/app/api/auth/route.ts` - API routes
-4. **Then**: `src/lib/auth.ts` - NextAuth configuration
-5. **Then**: `src/stores/auth.store.ts` - State management
+---
 
-### Why Different Approaches?
+## Directory Structure
 
-- **Express**: Pure backend, manual everything, maximum control
-- **NestJS**: Backend with structure, decorators, modules
-- **Next.js**: Full-stack, React frontend + API, opinionated
+```
+src/
+├── app/                    # App Router
+│   ├── (auth)/           # Login, register pages
+│   ├── (dashboard)/      # Protected pages
+│   ├── api/
+│   │   ├── auth/         # login, register, refresh, logout
+│   │   └── users/        # CRUD
+│   ├── layout.tsx        # Root layout
+│   └── page.tsx          # Home
+├── components/ui/         # Button, Input, Form, Card
+├── hooks/                 # useUsers, useDeleteUser
+├── lib/                   # auth, db, redis, env
+├── services/              # Business logic
+├── stores/                # Zustand stores
+└── types/                # TypeScript types
+```
 
 ---
 
 ## Interview Questions
 
-### ⭐ High Priority
+### Must Know
 
-1. Explain Next.js App Router vs Pages Router
-2. When would you use Server Components vs Client Components?
-3. How does NextAuth.js handle authentication?
-4. Why use Zustand for state management?
+1. **Server vs Client Components**: Server for DB/async, Client for hooks/events
+2. **Middleware**: Protects routes before rendering, uses NextAuth `auth()`
+3. **NextAuth Flow**: JWT cookie + httpOnly refresh token cookie
+4. **Zustand vs React Query**: UI state vs server state
 
-### 🔧 Medium Priority
+### Should Know
 
-1. How do you protect routes in Next.js?
-2. Explain the difference between API Routes and Server Actions
-3. How do you handle forms with validation in Next.js?
+1. **API Routes**: REST endpoints with GET/POST/PATCH/DELETE
+2. **Form Validation**: React Hook Form + Zod resolver
+3. **Rate Limiting**: Redis sorted sets with sliding window
 
-### 📚 Good to Understand
+---
 
-1. How does Drizzle ORM compare to Prisma?
-2. When would you choose Express over Next.js?
-3. How do you optimize Next.js for production?
+## Security Checklist
+
+| Feature          | Implementation                |
+| ---------------- | ----------------------------- |
+| Passwords        | bcrypt (12 rounds)            |
+| Sessions         | JWT in HTTPOnly cookie        |
+| Refresh Tokens   | httpOnly cookie + Redis cache |
+| Rate Limiting    | Redis sliding window          |
+| Input Validation | Zod schemas                   |
+| Trust Proxy      | Validate x-forwarded-for      |

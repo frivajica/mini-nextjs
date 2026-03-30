@@ -4,9 +4,8 @@ import type { SessionUser } from "@/types";
 
 interface AuthState {
   user: SessionUser | null;
-  refreshToken: string | null;
+  isLoggingOut: boolean;
   setUser: (user: SessionUser) => void;
-  setRefreshToken: (token: string) => void;
   clearAuth: () => void;
   logout: () => Promise<void>;
 }
@@ -15,33 +14,34 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      refreshToken: null,
+      isLoggingOut: false,
 
       setUser: (user) => set({ user }),
 
-      setRefreshToken: (refreshToken) => set({ refreshToken }),
-
-      clearAuth: () => set({ user: null, refreshToken: null }),
+      clearAuth: () => set({ user: null, isLoggingOut: false }),
 
       logout: async () => {
-        const { refreshToken } = get();
+        const { isLoggingOut } = get();
+        if (isLoggingOut) {
+          return;
+        }
+
+        set({ isLoggingOut: true });
+
         try {
-          await fetch("/api/auth", {
+          await fetch("/api/auth/logout", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "logout", refreshToken }),
           });
+        } catch (error) {
+          console.error("Logout error:", error);
         } finally {
-          set({ user: null, refreshToken: null });
+          set({ user: null, isLoggingOut: false });
         }
       },
     }),
     {
       name: "auth-storage",
-      partialize: (state) => ({
-        user: state.user,
-        refreshToken: state.refreshToken,
-      }),
+      partialize: (state) => ({ user: state.user }),
     },
   ),
 );

@@ -24,7 +24,7 @@ import type { ApiResponse, AuthResponse } from "@/types";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setUser, setRefreshToken } = useAuthStore();
+  const { setUser } = useAuthStore();
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -55,7 +55,6 @@ export default function LoginPage() {
         name: json.data.user.name,
         role: json.data.user.role as "USER" | "ADMIN",
       });
-      setRefreshToken(json.data.refreshToken);
       router.push("/users");
     } catch (error) {
       form.setError("root", {

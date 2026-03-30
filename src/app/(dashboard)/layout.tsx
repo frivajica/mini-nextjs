@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth.store";
@@ -13,26 +12,15 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { user, refreshToken, logout } = useAuthStore();
-
-  useEffect(() => {
-    if (!user || !refreshToken) {
-      router.push("/login");
-    }
-  }, [user, refreshToken, router]);
+  const { user, isLoggingOut, logout } = useAuthStore();
 
   const handleLogout = async () => {
-    await logout();
-    router.push("/login");
+    try {
+      await logout();
+    } finally {
+      router.push("/login");
+    }
   };
-
-  if (!user || !refreshToken) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -57,11 +45,16 @@ export default function DashboardLayout({
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">
-              {user.name} ({user.role})
+              {user?.name} ({user?.role})
             </span>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+            >
               <LogOut className="h-4 w-4 mr-2" />
-              Logout
+              {isLoggingOut ? "Logging out..." : "Logout"}
             </Button>
           </div>
         </div>

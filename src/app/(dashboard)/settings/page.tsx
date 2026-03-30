@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useForm } from "react-hook-form";
 import { useAuthStore } from "@/stores/auth.store";
 import { useUpdateSettings } from "@/hooks/use-settings";
@@ -34,6 +35,7 @@ export default function SettingsPage() {
   });
 
   const onSubmit = form.handleSubmit((data) => {
+    updateSettings.reset();
     updateSettings.mutate(data, {
       onSuccess: (updatedUser) => {
         setUser({
@@ -50,6 +52,15 @@ export default function SettingsPage() {
       },
     });
   });
+
+  React.useEffect(() => {
+    if (updateSettings.isSuccess) {
+      const timeout = setTimeout(() => {
+        updateSettings.reset();
+      }, 3000);
+      return () => clearTimeout(timeout);
+    }
+  }, [updateSettings.isSuccess, updateSettings]);
 
   return (
     <div className="space-y-6">
@@ -87,6 +98,7 @@ export default function SettingsPage() {
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     {...form.register("name")}
+                    id="name"
                     className="pl-10"
                     placeholder="Your name"
                   />
@@ -94,10 +106,13 @@ export default function SettingsPage() {
               </FormField>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
+                <label htmlFor="email" className="text-sm font-medium">
+                  Email
+                </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
+                    id="email"
                     value={user?.email}
                     disabled
                     className="pl-10 bg-muted"
@@ -109,10 +124,13 @@ export default function SettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Role</label>
+                <label htmlFor="role" className="text-sm font-medium">
+                  Role
+                </label>
                 <div className="relative">
                   <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
+                    id="role"
                     value={user?.role}
                     disabled
                     className="pl-10 bg-muted"
@@ -127,7 +145,11 @@ export default function SettingsPage() {
           </FormProvider>
 
           {updateSettings.isSuccess && (
-            <div className="p-3 text-sm bg-green-100 text-green-800 rounded-md">
+            <div
+              className="p-3 text-sm bg-green-100 text-green-800 rounded-md"
+              role="status"
+              aria-live="polite"
+            >
               Settings saved successfully
             </div>
           )}

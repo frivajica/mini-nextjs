@@ -1,11 +1,11 @@
 import { db } from "@/lib/db";
 import { users, refreshTokens } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { eq, count, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { redis } from "@/lib/redis";
 import type { User } from "@/lib/schema";
 
-const SALT_ROUNDS = 10;
+const SALT_ROUNDS = 12;
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 
 export async function createUser(data: {
@@ -123,23 +123,68 @@ export async function revokeRefreshToken(token: string): Promise<void> {
 export async function revokeAllUserTokens(userId: number): Promise<void> {
   await db.delete(refreshTokens).where(eq(refreshTokens.userId, userId));
 
-  const keys = await redis.keys(`refresh:*`);
-  if (keys.length > 0) {
-    const userIdStr = userId.toString();
-    const tokensToDelete = await Promise.all(
-      keys.map(async (key) => {
+  const userIdStr = userId.toString();
+  const stream = redis.scanStream({
+    match: `refresh:*`,
+    count: 100,
+  });
+
+  const keysToDelete: string[] = [];
+
+  await new Promise<void>((resolve, reject) => {
+    stream.on("data", async (keys: string[]) => {
+      for (const key of keys) {
         const storedUserId = await redis.get(key);
-        return storedUserId === userIdStr ? key : null;
-      }),
-    );
-    await Promise.all(
-      tokensToDelete.filter(Boolean).map((key) => redis.del(key!)),
-    );
+        if (storedUserId === userIdStr) {
+          keysToDelete.push(key);
+        }
+      }
+    });
+    stream.on("end", () => resolve());
+    stream.on("error", (err) => reject(err));
+  });
+
+  if (keysToDelete.length > 0) {
+    await Promise.all(keysToDelete.map((key) => redis.del(key)));
   }
 }
 
-export async function getUsers(): Promise<User[]> {
-  return db.select().from(users);
+export interface GetUsersOptions {
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedUsers {
+  users: User[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export async function getUsers(
+  options: GetUsersOptions = {},
+): Promise<PaginatedUsers> {
+  const { page = 1, limit = 10 } = options;
+  const offset = (page - 1) * limit;
+
+  const totalResult = await db.select({ count: count() }).from(users);
+  const total = totalResult[0]?.count ?? 0;
+  const totalPages = Math.ceil(total / limit);
+
+  const paginatedUsers = await db
+    .select()
+    .from(users)
+    .limit(limit)
+    .offset(offset);
+
+  return {
+    users: paginatedUsers,
+    total,
+    page,
+    limit,
+    totalPages,
+  };
 }
 
 export async function getUserById(id: number): Promise<User | null> {

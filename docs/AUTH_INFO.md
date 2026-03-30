@@ -7,15 +7,15 @@
 
 ## Overview
 
-This Next.js project uses **NextAuth.js v5** with JWT sessions and Redis-cached refresh tokens.
+This Next.js project uses **NextAuth.js v5** with JWT sessions and Redis-cached refresh tokens stored securely in httpOnly cookies.
 
 | Component        | Technology                              |
 | ---------------- | --------------------------------------- |
 | Auth Framework   | NextAuth.js v5 (Beta)                   |
 | Session Strategy | JWT (stored in secure HTTPOnly cookies) |
-| Token Storage    | Redis (for refresh token validation)    |
+| Token Storage    | Redis + httpOnly cookies (secure)       |
 | Database         | PostgreSQL via Drizzle ORM              |
-| Password Hashing | bcrypt                                  |
+| Password Hashing | bcrypt (12 rounds)                      |
 
 ---
 
@@ -34,9 +34,236 @@ This Next.js project uses **NextAuth.js v5** with JWT sessions and Redis-cached 
 │                          ▼                   ▼              │
 │                   ┌──────────────┐    ┌─────────────┐       │
 │                   │   Drizzle   │    │ PostgreSQL  │       │
-│                   │  (Adapter)  │    │  (Users)    │       │
+│                   │  (Adapter)  │    │  (Users)   │       │
 │                   └──────────────┘    └─────────────┘       │
 └─────────────────────────────────────────────────────────────┘
+```
+
+### Security Architecture
+
+- **JWT Access Token**: Managed by NextAuth, stored in session cookie (HTTPOnly)
+- **Refresh Token**: Stored in httpOnly cookie with SameSite=lax, secure in production
+- **Redis**: Caches refresh token validation for fast lookups
+- **API Routes**: Use NextAuth's `auth()` to verify JWT sessions
+
+---
+
+## API Routes (Split Design)
+
+Auth functionality is split into separate route handlers:
+
+| Endpoint                  | Purpose                                         |
+| ------------------------- | ----------------------------------------------- |
+| `POST /api/auth/login`    | User login, sets httpOnly refresh cookie        |
+| `POST /api/auth/register` | User registration, sets httpOnly refresh cookie |
+| `POST /api/auth/refresh`  | Refresh access token using httpOnly cookie      |
+| `POST /api/auth/logout`   | Revoke refresh token, clear httpOnly cookie     |
+| `GET /api/auth/session`   | Get current session (handled by NextAuth)       |
+
+---
+
+## Token Flow
+
+### 1. Login (Sets httpOnly Cookie)
+
+```
+Client                    Next.js API                 Redis           Database
+  │                          │                          │                │
+  │  POST /api/auth/login  │                          │                │
+  │  { email, password }    │                          │                │
+  │─────────────────────────▶│                          │                │
+  │                          │  Rate limit check        │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │                          │  Validate credentials    │                │
+  │                          │──────────────────────────▶│                │
+  │                          │  (bcrypt compare)         │                │
+  │                          │◀──────────────────────────│                │
+  │                          │                          │                │
+  │                          │  CREATE refresh_token     │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │                          │  Cache in Redis          │                │
+  │                          │  SETEX refresh:token    │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │  httpOnly Cookie        │                          │                │
+  │  (refresh_token)       │                          │                │
+  │◀─────────────────────────│                          │                │
+  │                          │                          │                │
+```
+
+### 2. Token Refresh (Atomic Rotation)
+
+```
+Client                    Next.js API                 Redis           Database
+  │                          │                          │                │
+  │  POST /api/auth/refresh │                          │                │
+  │  Cookie: refresh_token  │                          │                │
+  │─────────────────────────▶│                          │                │
+  │                          │  Rate limit check        │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │                          │  Validate token          │                │
+  │                          │  (Redis cache first)     │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │                          │  CREATE new token FIRST │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │                          │  REVOKE old token       │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │  New httpOnly Cookie   │                          │                │
+  │◀─────────────────────────│                          │                │
+  │                          │                          │                │
+```
+
+### 3. Logout (Clear Cookie)
+
+```
+Client                    Next.js API                 Redis           Database
+  │                          │                          │                │
+  │  POST /api/auth/logout │                          │                │
+  │  Cookie: refresh_token  │                          │                │
+  │─────────────────────────▶│                          │                │
+  │                          │  Validate token          │                │
+  │                          │  (verify ownership)      │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │                          │  REVOKE refresh_token    │                │
+  │                          │  from DB                 │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │                          │  DELETE from Redis       │                │
+  │                          │  DEL refresh:token      │                │
+  │                          │─────────────────────────▶│                │
+  │                          │                          │                │
+  │  Clear Cookie           │                          │                │
+  │◀─────────────────────────│                          │                │
+  │                          │                          │                │
+```
+
+---
+
+## Key Files
+
+| File                                 | Purpose                        |
+| ------------------------------------ | ------------------------------ |
+| `src/lib/auth.ts`                    | NextAuth configuration, JWT    |
+| `src/app/api/auth/login/route.ts`    | Login endpoint, sets cookie    |
+| `src/app/api/auth/register/route.ts` | Register endpoint, sets cookie |
+| `src/app/api/auth/refresh/route.ts`  | Token refresh, atomic rotation |
+| `src/app/api/auth/logout/route.ts`   | Logout, clears cookie          |
+| `src/services/user.service.ts`       | User CRUD, token management    |
+| `src/lib/redis.ts`                   | Redis client + closeRedis()    |
+| `src/lib/rate-limit.ts`              | Rate limiting + IP validation  |
+| `src/lib/env.ts`                     | Environment validation         |
+| `src/stores/auth.store.ts`           | Zustand store (user only)      |
+| `src/middleware.ts`                  | Route protection middleware    |
+
+---
+
+## Database Schema
+
+### Users Table
+
+```typescript
+// src/lib/schema.ts
+export const users = pgTable("users", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  name: varchar("name", { length: 255 }),
+  password: text("password").notNull(),
+  role: varchar("role", { length: 50 }).default("USER").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+```
+
+### Refresh Tokens Table
+
+```typescript
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+```
+
+---
+
+## Security Features
+
+1. **Password Hashing**: bcrypt with 12 rounds
+2. **JWT Sessions**: Stored in HTTPOnly cookies (secure, not accessible to JS)
+3. **Refresh Token Storage**: httpOnly cookies with SameSite=lax, secure in production
+4. **Redis Caching**: Fast token validation without DB hit on every refresh
+5. **Token Rotation**: Atomic rotation - create new first, then revoke old
+6. **Rate Limiting**: 10 requests per minute per IP on all auth endpoints
+7. **Input Validation**: Zod schemas for all inputs
+8. **IP Spoofing Protection**: Validates x-forwarded-for against TRUSTED_PROXY_IP
+9. **Refresh Token Validation**: Token ownership verified before revocation
+
+---
+
+## Environment Variables
+
+| Variable           | Description                             |
+| ------------------ | --------------------------------------- |
+| `DATABASE_URL`     | PostgreSQL connection string (required) |
+| `AUTH_SECRET`      | Secret for JWT signing (required)       |
+| `REDIS_URL`        | Redis connection string (optional)      |
+| `TRUSTED_PROXY_IP` | Trusted proxy IP for x-forwarded-for    |
+| `NEXTAUTH_URL`     | Application URL (optional)              |
+
+---
+
+## Testing Auth
+
+```bash
+# Register (sets httpOnly cookie)
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123","name":"Test User"}' \
+  -c cookies.txt
+
+# Login (sets httpOnly cookie)
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}' \
+  -c cookies.txt
+
+# Refresh token (reads httpOnly cookie)
+curl -X POST http://localhost:3000/api/auth/refresh \
+  -b cookies.txt
+
+# Logout (reads and clears httpOnly cookie)
+curl -X POST http://localhost:3000/api/auth/logout \
+  -b cookies.txt
+```
+
+┌─────────────────────────────────────────────────────────────┐
+│ Next.js App │
+├─────────────────────────────────────────────────────────────┤
+│ │
+│ ┌──────────┐ ┌──────────────┐ ┌─────────────┐ │
+│ │ Client │───▶│ NextAuth.js │───▶│ Redis │ │
+│ └──────────┘ └──────────────┘ │ (Sessions) │ │
+│ │ └─────────────┘ │
+│ │ │ │
+│ ▼ ▼ │
+│ ┌──────────────┐ ┌─────────────┐ │
+│ │ Drizzle │ │ PostgreSQL │ │
+│ │ (Adapter) │ │ (Users) │ │
+│ └──────────────┘ └─────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+
 ```
 
 ---
@@ -46,98 +273,106 @@ This Next.js project uses **NextAuth.js v5** with JWT sessions and Redis-cached 
 ### 1. Login
 
 ```
-Client                    Next.js API                 Redis           Database
-  │                          │                          │                │
-  │  POST /api/auth         │                          │                │
-  │  { email, password }    │                          │                │
-  │─────────────────────────▶│                          │                │
-  │                          │  Validate credentials    │                │
-  │                          │──────────────────────────▶│                │
-  │                          │  (bcrypt compare)         │                │
-  │                          │◀──────────────────────────│                │
-  │                          │                          │                │
-  │                          │  INSERT refresh_token    │                │
-  │                          │─────────────────────────▶│                │
-  │                          │                          │                │
-  │                          │  Cache in Redis          │                │
-  │                          │  SETEX refresh:token    │                │
-  │                          │─────────────────────────▶│                │
-  │                          │                          │                │
-  │  JWT Session Cookie     │                          │                │
-  │◀─────────────────────────│                          │                │
-  │                          │                          │                │
+
+Client Next.js API Redis Database
+│ │ │ │
+│ POST /api/auth │ │ │
+│ { email, password } │ │ │
+│─────────────────────────▶│ │ │
+│ │ Validate credentials │ │
+│ │──────────────────────────▶│ │
+│ │ (bcrypt compare) │ │
+│ │◀──────────────────────────│ │
+│ │ │ │
+│ │ INSERT refresh_token │ │
+│ │─────────────────────────▶│ │
+│ │ │ │
+│ │ Cache in Redis │ │
+│ │ SETEX refresh:token │ │
+│ │─────────────────────────▶│ │
+│ │ │ │
+│ JWT Session Cookie │ │ │
+│◀─────────────────────────│ │ │
+│ │ │ │
+
 ```
 
 ### 2. Accessing Protected Routes
 
 ```
-Client                    Next.js API                 Redis           Database
-  │                          │                          │                │
-  │  GET /users             │                          │                │
-  │  Cookie: JWT Session   │                          │                │
-  │─────────────────────────▶│                          │                │
-  │                          │  Verify JWT              │                │
-  │                          │  (NextAuth)              │                │
-  │                          │                          │                │
-  │  { users: [...] }       │                          │                │
-  │◀─────────────────────────│                          │                │
-  │                          │                          │                │
+
+Client Next.js API Redis Database
+│ │ │ │
+│ GET /users │ │ │
+│ Cookie: JWT Session │ │ │
+│─────────────────────────▶│ │ │
+│ │ Verify JWT │ │
+│ │ (NextAuth) │ │
+│ │ │ │
+│ { users: [...] } │ │ │
+│◀─────────────────────────│ │ │
+│ │ │ │
+
 ```
 
 ### 3. Token Refresh (with Redis)
 
 ```
-Client                    Next.js API                 Redis           Database
-  │                          │                          │                │
-  │  POST /api/auth          │                          │                │
-  │  { action: "refresh",   │                          │                │
-  │    refreshToken }       │                          │                │
-  │─────────────────────────▶│                          │                │
-  │                          │  Check Redis cache        │                │
-  │                          │  GET refresh:token       │                │
-  │                          │─────────────────────────▶│                │
-  │                          │                          │                │
-  │                          │  Return userId if found  │                │
-  │                          │◀─────────────────────────│                │
-  │                          │                          │                │
-  │                          │  DELETE old refresh      │                │
-  │                          │  token from DB          │                │
-  │                          │─────────────────────────▶│                │
-  │                          │                          │                │
-  │                          │  INSERT new refresh     │                │
-  │                          │  token                   │                │
-  │                          │─────────────────────────▶│                │
-  │                          │                          │                │
-  │                          │  Update Redis cache      │                │
-  │                          │  SETEX refresh:new      │                │
-  │                          │─────────────────────────▶│                │
-  │                          │                          │                │
-  │  { refreshToken }       │                          │                │
-  │◀─────────────────────────│                          │                │
-  │                          │                          │                │
+
+Client Next.js API Redis Database
+│ │ │ │
+│ POST /api/auth │ │ │
+│ { action: "refresh", │ │ │
+│ refreshToken } │ │ │
+│─────────────────────────▶│ │ │
+│ │ Check Redis cache │ │
+│ │ GET refresh:token │ │
+│ │─────────────────────────▶│ │
+│ │ │ │
+│ │ Return userId if found │ │
+│ │◀─────────────────────────│ │
+│ │ │ │
+│ │ DELETE old refresh │ │
+│ │ token from DB │ │
+│ │─────────────────────────▶│ │
+│ │ │ │
+│ │ INSERT new refresh │ │
+│ │ token │ │
+│ │─────────────────────────▶│ │
+│ │ │ │
+│ │ Update Redis cache │ │
+│ │ SETEX refresh:new │ │
+│ │─────────────────────────▶│ │
+│ │ │ │
+│ { refreshToken } │ │ │
+│◀─────────────────────────│ │ │
+│ │ │ │
+
 ```
 
 ### 4. Logout
 
 ```
-Client                    Next.js API                 Redis           Database
-  │                          │                          │                │
-  │  POST /api/auth          │                          │                │
-  │  { action: "logout",    │                          │                │
-  │    refreshToken }       │                          │                │
-  │─────────────────────────▶│                          │                │
-  │                          │  DELETE refresh_token    │                │
-  │                          │  from DB                 │                │
-  │                          │─────────────────────────▶│                │
-  │                          │                          │                │
-  │                          │  DELETE from Redis       │                │
-  │                          │  DEL refresh:token      │                │
-  │                          │─────────────────────────▶│                │
-  │                          │                          │                │
-  │  Clear session cookie    │                          │                │
-  │◀─────────────────────────│                          │                │
-  │                          │                          │                │
-```
+
+Client Next.js API Redis Database
+│ │ │ │
+│ POST /api/auth │ │ │
+│ { action: "logout", │ │ │
+│ refreshToken } │ │ │
+│─────────────────────────▶│ │ │
+│ │ DELETE refresh_token │ │
+│ │ from DB │ │
+│ │─────────────────────────▶│ │
+│ │ │ │
+│ │ DELETE from Redis │ │
+│ │ DEL refresh:token │ │
+│ │─────────────────────────▶│ │
+│ │ │ │
+│ Clear session cookie │ │ │
+│◀─────────────────────────│ │ │
+│ │ │ │
+
+````
 
 ---
 
@@ -171,7 +406,7 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
-```
+````
 
 ### Refresh Tokens Table
 

@@ -17,7 +17,6 @@ export interface SanitizedUser {
 
 export interface AuthResponse {
   user: SanitizedUser;
-  refreshToken: string;
 }
 
 export interface ApiResponse<T = unknown> {

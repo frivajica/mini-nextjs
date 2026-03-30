@@ -11,6 +11,11 @@ export interface UnauthorizedResult {
   user: null;
 }
 
+function parseUserId(id: string): number | null {
+  const parsed = parseInt(id, 10);
+  return isNaN(parsed) || parsed < 1 ? null : parsed;
+}
+
 export async function requireAuth(): Promise<AuthResult | UnauthorizedResult> {
   const session = await auth();
 
@@ -24,9 +29,21 @@ export async function requireAuth(): Promise<AuthResult | UnauthorizedResult> {
     };
   }
 
+  const userId = parseUserId(session.user.id);
+
+  if (!userId) {
+    return {
+      response: NextResponse.json(
+        { success: false, error: "Invalid session" },
+        { status: 401 },
+      ),
+      user: null,
+    };
+  }
+
   return {
     user: {
-      id: parseInt(session.user.id, 10),
+      id: userId,
       email: session.user.email || "",
       name: session.user.name || null,
       role: session.user.role as UserRole,
