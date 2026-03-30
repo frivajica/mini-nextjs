@@ -1,5 +1,5 @@
 import { redis } from "@/lib/redis";
-import { getEnv } from "@/lib/env";
+import { env } from "@/lib/env";
 
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 const MAX_REQUESTS_PER_WINDOW = 10;
@@ -11,7 +11,6 @@ export interface RateLimitResult {
 }
 
 export function getClientIp(request: Request): string {
-  const env = getEnv();
   const trustedProxy = env.TRUSTED_PROXY_IP;
 
   const forwardedFor = request.headers.get("x-forwarded-for");
