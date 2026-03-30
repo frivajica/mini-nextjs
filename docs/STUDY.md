@@ -793,7 +793,7 @@ export default async function ProductPage({ params }) {
 ✅ Descriptive alt text on images
 ✅ robots.txt, sitemap.xml
 ✅ Canonical URLs
-✅ Core Web Vitals (LCP < 2.5s, CLS < 0.1, FID < 100ms)
+✅ Core Web Vitals (LCP ≤ 2.5s, INP ≤ 200ms, CLS ≤ 0.1)
 ```
 
 ### 📚 Resources
@@ -1134,11 +1134,13 @@ type State = { type: 'a'; a: A } | { type: 'b'; b: B };
 
 ## Web Vitals
 
-| Metric | Good    | Bad     | Measures                 |
-| ------ | ------- | ------- | ------------------------ |
-| LCP    | < 2.5s  | > 4s    | Largest Contentful Paint |
-| FID    | < 100ms | > 300ms | First Input Delay        |
-| CLS    | < 0.1   | > 0.25  | Cumulative Layout Shift  |
+| Metric | Good    | Needs Improvement | Poor    | Measures                  |
+| ------ | ------- | ----------------- | ------- | ------------------------- |
+| LCP    | ≤ 2.5s  | 2.5s - 4.0s       | > 4.0s  | Largest Contentful Paint  |
+| INP    | ≤ 200ms | 200ms - 500ms     | > 500ms | Interaction to Next Paint |
+| CLS    | ≤ 0.1   | 0.1 - 0.25        | > 0.25  | Cumulative Layout Shift   |
+
+**Note**: FID is deprecated. **INP** (Interaction to Next Paint) replaced it as the Core Web Vital for responsiveness.
 
 ## SEO Checklist
 
