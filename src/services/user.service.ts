@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { users, refreshTokens } from "@/lib/schema";
-import { eq, count, sql } from "drizzle-orm";
+import { eq, count, sql, desc } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { redis } from "@/lib/redis";
 import type { User } from "@/lib/schema";
@@ -124,25 +124,26 @@ export async function revokeAllUserTokens(userId: number): Promise<void> {
   await db.delete(refreshTokens).where(eq(refreshTokens.userId, userId));
 
   const userIdStr = userId.toString();
-  const stream = redis.scanStream({
-    match: `refresh:*`,
-    count: 100,
-  });
-
+  let cursor = "0";
   const keysToDelete: string[] = [];
 
-  await new Promise<void>((resolve, reject) => {
-    stream.on("data", async (keys: string[]) => {
-      for (const key of keys) {
-        const storedUserId = await redis.get(key);
-        if (storedUserId === userIdStr) {
-          keysToDelete.push(key);
-        }
+  do {
+    const [nextCursor, keys] = await redis.scan(
+      cursor,
+      "MATCH",
+      "refresh:*",
+      "COUNT",
+      100,
+    );
+    cursor = nextCursor;
+
+    for (const key of keys) {
+      const storedUserId = await redis.get(key);
+      if (storedUserId === userIdStr) {
+        keysToDelete.push(key);
       }
-    });
-    stream.on("end", () => resolve());
-    stream.on("error", (err) => reject(err));
-  });
+    }
+  } while (cursor !== "0");
 
   if (keysToDelete.length > 0) {
     await Promise.all(keysToDelete.map((key) => redis.del(key)));
@@ -175,6 +176,7 @@ export async function getUsers(
   const paginatedUsers = await db
     .select()
     .from(users)
+    .orderBy(desc(users.createdAt))
     .limit(limit)
     .offset(offset);
 

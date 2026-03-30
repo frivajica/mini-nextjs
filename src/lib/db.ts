@@ -8,7 +8,11 @@ let dbInstance: PostgresJsDatabase<typeof schema> | null = null;
 
 function getClient() {
   if (!client) {
-    client = postgres(env.DATABASE_URL, { prepare: false });
+    client = postgres(env.DATABASE_URL, {
+      prepare: false,
+      connect_timeout: 10,
+      idle_timeout: 20,
+    });
   }
   return client;
 }

@@ -1,8 +1,14 @@
 import { auth } from "@/lib/auth";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import type { Session } from "next-auth";
 
-export default auth(function proxy(req: NextRequest & { auth: unknown }) {
-  const isLoggedIn = !!req.auth;
+type AuthenticatedRequest = NextRequest & {
+  auth: Session | null;
+};
+
+export default auth(function proxy(req: AuthenticatedRequest) {
+  const isLoggedIn = !!req.auth?.user;
   const isAuthPage =
     req.nextUrl.pathname.startsWith("/login") ||
     req.nextUrl.pathname.startsWith("/register");

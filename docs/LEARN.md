@@ -13,7 +13,7 @@
 | 1   | [App Router](#1-app-router)    | Server Components by default     | `src/app/`           |
 | 2   | [API Routes](#2-api-routes)    | REST endpoints in `src/app/api/` | `src/app/api/`       |
 | 3   | [NextAuth](#3-auth)            | JWT + httpOnly cookies           | `src/lib/auth.ts`    |
-| 4   | [Middleware](#4-middleware)    | Route protection                 | `src/middleware.ts`  |
+| 4   | [Middleware](#4-middleware)    | Route protection                 | `src/proxy.ts`       |
 | 5   | [Zustand](#5-state)            | Global UI state                  | `src/stores/`        |
 | 6   | [React Query](#6-server-state) | Server state                     | `src/hooks/`         |
 | 7   | [Drizzle](#7-database)         | Type-safe SQL                    | `src/lib/schema.ts`  |
@@ -151,12 +151,14 @@ export const { handlers, auth } = NextAuth({
 
 ---
 
-## 4. Middleware
+## 4. Middleware (Proxy)
 
 **Key Idea**: Protect routes BEFORE they render. NextAuth provides `auth()` middleware.
 
+> **Note**: In Next.js 16, `middleware.ts` was renamed to `proxy.ts` to clarify network boundary.
+
 ```typescript
-// src/middleware.ts
+// src/proxy.ts
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
   const isAuthPage = req.nextUrl.pathname.startsWith("/login");

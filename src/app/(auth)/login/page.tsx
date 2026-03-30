@@ -55,7 +55,7 @@ export default function LoginPage() {
         name: json.data.user.name,
         role: json.data.user.role as "USER" | "ADMIN",
       });
-      router.push("/users");
+      router.push("/dashboard");
     } catch (error) {
       form.setError("root", {
         message:
